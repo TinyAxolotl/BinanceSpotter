@@ -1,0 +1,15 @@
+{
+  "wifi": {
+    "ssid": "Your_SSID",
+    "password": "Your_Password"
+  },
+  "binance": {
+    "symbols": ["BTCUSDT", "ETHUSDT", "NOTUSDT"],
+    "update_interval": 30
+  },
+  "display": {
+    "brightness": 128,
+    "theme": "dark",
+    "coin_switch_interval": 10
+  }
+}
