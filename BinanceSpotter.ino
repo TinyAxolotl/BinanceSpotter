@@ -5,13 +5,13 @@
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
 
+#include "main.h"
+
 #define DEBUG_MODE        true
 #define CONFIG_FILE_NAME  "/config.json"
 
 WebServer server(80);
 
-const char* ssid = "wifiname";
-const char* password = "pass";
 const char* upload_html = R"(
 <!DOCTYPE html>
 <html>
@@ -24,6 +24,44 @@ const char* upload_html = R"(
   </body>
 </html>
 )";
+
+boolean json_exist = false;
+
+spotter_config conf;
+
+void setDefaultConfig() {
+  const char* ssid = "wifiname";
+  const char* password = "pass";
+  const char* default_coin = "BTCUSDT";
+
+  conf.wifi.ssid = (char*)malloc(strlen(ssid) + 1);
+  strcpy(conf.wifi.ssid, ssid);
+  conf.wifi.password = (char*)malloc(strlen(password) + 1);
+  strcpy(conf.wifi.password, password);
+
+  conf.binance.num_of_coins = 1;
+  conf.binance.coin_list = (char**)malloc(conf.binance.num_of_coins * sizeof(char*));
+  conf.binance.coin_list[0] = (char*)malloc(strlen(default_coin) + 1);
+  strcpy(conf.binance.coin_list[0], default_coin);
+
+  conf.binance.update_interval_s = 30;
+  conf.display.brightness = 128;
+  conf.display.theme = (char*)malloc(strlen("dark") + 1);
+  strcpy(conf.display.theme, "dark");
+  conf.display.coin_switch_interval_s = 10;
+}
+
+void freeConfig() {
+  free(conf.wifi.ssid);
+  free(conf.wifi.password);
+
+  for (int i = 0; i < conf.binance.num_of_coins; i++) {
+    free(conf.binance.coin_list[i]);
+  }
+  free(conf.binance.coin_list);
+
+  free(conf.display.theme);
+}
 
 void setup() {
   Serial.begin(115200);
@@ -59,7 +97,7 @@ void setup() {
  
   WiFi.disconnect(true);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
+  WiFi.begin(conf.wifi.ssid, conf.wifi.password);
 
   Serial.print("WiFi connecting");
 
