@@ -4,16 +4,18 @@
 #include <ElegantOTA.h>
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
+#include <WiFiClientSecure.h>
 
 #include "main.h"
 
 #define DEBUG_MODE        true
 #define CONFIG_FILE_NAME  "/config.json"
 #define STATIC_JSON_SIZE  512
-
+#define BINANCE_LINK      "/api/v3/ticker/price?symbol="
 WebServer server(80);
 
 void serverRoutine(void *pvParameters);
+void binanceRequestRoutine(void *pvParameters);
 
 const char* upload_html = R"(
 <!DOCTYPE html>
@@ -27,10 +29,59 @@ const char* upload_html = R"(
   </body>
 </html>
 )";
-
+const char* host = "api.binance.com";
+const int httpsPort = 443;
 boolean json_exist = false;
 
 spotter_config conf;
+
+void fetchCoinPrice(const char* coinSymbol) {
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  if (!client.connect(host, httpsPort)) {
+    Serial.println("Connection failed!");
+    return;
+  }
+
+  String startURL = BINANCE_LINK;
+  String fullURL = startURL + coinSymbol;
+
+  printf("Going to send request: %s\n", fullURL.c_str());
+  client.print(String("GET ") + fullURL + " HTTP/1.1\r\n" +
+               "Host: " + host + "\r\n" +
+               "Connection: close\r\n\r\n");
+
+  while (client.connected() && !client.available()) delay(10);
+
+  String line;
+  while (client.available()) {
+    line += client.readStringUntil('\n');
+  }
+  client.stop();
+
+  int jsonStartIndex = line.indexOf("==");
+  if (jsonStartIndex == -1) {
+    Serial.println("Failed to find JSON data marker '==' in response");
+    return;
+  }
+
+  String jsonPart = line.substring(jsonStartIndex + 2);
+
+  Serial.printf("Received responce: %s\n", jsonPart.c_str());
+  StaticJsonDocument<STATIC_JSON_SIZE> doc;
+  DeserializationError error = deserializeJson(doc, jsonPart);
+  if (error) {
+    Serial.print("Failed to parse JSON: ");
+    Serial.println(error.c_str());
+    return;
+  }
+
+  const char* symbol = doc["symbol"];
+  const char* price = doc["price"];
+  Serial.printf("Symbol: %s\n", symbol);
+  Serial.printf("Price: %s\n", price);
+}
 
 void setDefaultConfig() {
   const char* ssid = "wifiname";
@@ -110,7 +161,7 @@ void setup() {
   StaticJsonDocument<STATIC_JSON_SIZE> doc;
   DeserializationError error = deserializeJson(doc, configFile);
   if (error) {
-    Serial.printf("Failed to parse JSON: %f\n", error.c_str());
+    Serial.printf("Failed to parse JSON: %s\n", error.c_str());
   } else {
     json_exist = true;
   }
@@ -153,10 +204,20 @@ void setup() {
   server.begin();
 
   xTaskCreate(serverRoutine, "server & OTA", 2000, NULL, 1, NULL);
+  xTaskCreate(binanceRequestRoutine, "reqCoinCurr", 5000, NULL, 5, NULL);
 }
 
 void loop() {
 
+}
+
+void binanceRequestRoutine(void *pvParameters) {
+  while(true) {
+    for (int i = 0; i < conf.binance.num_of_coins; i++) {
+      fetchCoinPrice(conf.binance.coin_list[i]);
+      vTaskDelay((conf.binance.update_interval_s * 1000) / portTICK_PERIOD_MS);
+    }
+  }
 }
 
 void serverRoutine(void *pvParameters) {
