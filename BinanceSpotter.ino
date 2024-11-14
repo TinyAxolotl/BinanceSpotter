@@ -9,6 +9,7 @@
 
 #define DEBUG_MODE        true
 #define CONFIG_FILE_NAME  "/config.json"
+#define STATIC_JSON_SIZE  512
 
 WebServer server(80);
 
@@ -63,6 +64,28 @@ void freeConfig() {
   free(conf.display.theme);
 }
 
+void setConfigFromJson(StaticJsonDocument<STATIC_JSON_SIZE> *doc) {
+ 
+  conf.wifi.ssid = (char*)malloc(strlen((*doc)["wifi"]["ssid"])+1);
+  strcpy(conf.wifi.ssid, (*doc)["wifi"]["ssid"]);
+  conf.wifi.password = (char*)malloc(strlen((*doc)["wifi"]["password"])+1);
+  strcpy(conf.wifi.password, (*doc)["wifi"]["password"]);
+
+  conf.binance.num_of_coins = (*doc)["binance"]["symbols"].size();
+  conf.binance.coin_list = (char**)malloc(conf.binance.num_of_coins * sizeof(char*));
+
+  for(int i = 0; i < conf.binance.num_of_coins; i++){
+    conf.binance.coin_list[i] = (char*)malloc(strlen((*doc)["binance"]["symbols"][i]) + 1);
+    strcpy(conf.binance.coin_list[i], (*doc)["binance"]["symbols"][i]);
+  }
+
+  conf.binance.update_interval_s = (*doc)["binance"]["update_interval"];
+  conf.display.brightness = (*doc)["display"]["brightness"];
+  conf.display.theme = (char*)malloc(strlen((*doc)["display"]["theme"]) + 1);
+  strcpy(conf.display.theme, (*doc)["display"]["theme"]);
+  conf.display.coin_switch_interval_s = (*doc)["display"]["coin_switch_interval"];
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println("\n\nBinance spotter started");
@@ -82,10 +105,12 @@ void setup() {
     Serial.printf("Failed to open %s\n", CONFIG_FILE_NAME);
   }
 
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<STATIC_JSON_SIZE> doc;
   DeserializationError error = deserializeJson(doc, configFile);
   if (error) {
     Serial.printf("Failed to parse JSON: %f\n", error.c_str());
+  } else {
+    json_exist = true;
   }
 
   configFile.close();
@@ -94,7 +119,13 @@ void setup() {
     Serial.printf("Content of %s:\n", CONFIG_FILE_NAME);
     serializeJsonPretty(doc, Serial);
   }
- 
+
+  if (!json_exist) {
+    setDefaultConfig();
+  } else {
+    setConfigFromJson(&doc);
+  }
+
   WiFi.disconnect(true);
   WiFi.mode(WIFI_STA);
   WiFi.begin(conf.wifi.ssid, conf.wifi.password);
