@@ -13,6 +13,8 @@
 
 WebServer server(80);
 
+void serverRoutine(void *pvParameters);
+
 const char* upload_html = R"(
 <!DOCTYPE html>
 <html>
@@ -149,11 +151,19 @@ void setup() {
 
   ElegantOTA.begin(&server);
   server.begin();
+
+  xTaskCreate(serverRoutine, "server & OTA", 2000, NULL, 1, NULL);
 }
 
 void loop() {
-  server.handleClient();
-  ElegantOTA.loop();
+
+}
+
+void serverRoutine(void *pvParameters) {
+  while (true) {
+    server.handleClient();
+    ElegantOTA.loop();
+  }
 }
 
 void listSPIFFSFiles() {
